@@ -1,32 +1,44 @@
-# 도커 컴포즈 살펴보기: 쉘스크립트에서 도커 컴포즈로 배포 프로세스를 전환하며
+# 쉘스크립트에서 도커 컴포즈로 배포 프로세스를 전환하며 도커 컴포즈 살펴보기 
 
-안녕하세요. 우아한테크코스 BE 6기 제우스입니다. [코드잽](https://code-zap.com)([Github](https://github.com/zeus6768/2024-code-zap))의 백엔드를 맡아 개발하고 있습니다. 데모데이마다 요구사항이 주어지며 프로젝트의 인프라 구조가 변화했습니다. 그중 배포 프로세스에서 리눅스 쉘 스크립트를 사용하다가 도커 컴포즈로 전환한 과정에 대해 이야기해보려 합니다.
+## 1. 소개
 
-데모데이의 요구사항은 아래와 같이 변화했습니다. 
+### 배포 프로세스의 중요성
 
-> ### 2차: 개발(dev) 환경 구축
-> - 개발 서버에 서비스 띄우기
-> - CI와 쉘 스크립트 등을 활용한 배포 자동화
-> ### 3차: 서비스 운영 환경 구축
-> - 로깅 프레임워크 적용 등
-> ### 4차: 프로덕션(prod) 환경 구축
-> - 실 서버 도메인 연결, HTTPS 적용 등
-> ### 5차: 서비스 가용성 개선
-> - AWS AZ 분리 및 로드밸런서 적용 등
+프로젝트의 인프라 구조는 매번 변화하며, 특히 배포 프로세스는 요구사항에 따라 지속적으로 진화해야 했습니다. 저희는 초기에는 리눅스 쉘 스크립트를 사용하여 배포했지만, 여러 문제를 해결하기 위해 도커 컴포즈를 도입하게 되었습니다.
 
-한 달 사이에 운영 서버를 추가로 배포해야 했고, 5차 데모데이에는 EC2 가용 영역을 두 개로 분리하는 요구사항도 추가되었습니다. 서로 다른 EC2 인스턴스에서 동일한 설정으로 배포해야 했습니다. 객체지향에서만 유연한 확장이 필요한 건 아니었습니다. 
+### 전통적인 쉘스크립트 배포의 특징과 한계점
 
-## 쉘스크립트
+초기에는 간단한 쉘 스크립트를 통해 개발 서버에 서비스를 띄웠습니다. 예를 들어, 자바 설치, 빌드, 서버 실행을 자동화하는 스크립트를 사용했습니다. 그러나 쉘스크립트는 운영체제별로 설정 방법이 다르고, 유지보수가 어렵다는 한계가 있었습니다.
 
-개발 서버에 간단한 서비스를 띄우는 일은 간단한 쉘 스크립트로 가능했습니다. 
+### 도커 컴포즈 도입의 필요성
 
-다음은 레벨2의 백엔드 인프라 수업 당시 주어진 배포 스크립트입니다. 
+이러한 한계점을 극복하고 배포 프로세스를 효율화하기 위해 도커 컴포즈를 도입했습니다. 도커 컴포즈는 환경 간 일관성을 유지하며 배포를 자동화할 수 있는 강력한 도구입니다.
 
-우분투 환경에서 동작하는 코드입니다.
+## 2. 기본 개념 이해하기
+
+### 도커 컴포즈란 무엇인가?
+
+도커 컴포즈는 멀티컨테이너 도커 애플리케이션을 정의하고 실행하는 도구입니다. `docker-compose.yml` 파일을 사용해 애플리케이션의 서비스, 네트워크, 볼륨 등을 정의할 수 있습니다.
+
+### 주요 개념: 서비스, 네트워크, 볼륨
+
+- **서비스**: 애플리케이션의 개별 컨테이너를 의미하며, 여러 개의 서비스를 정의해 애플리케이션을 구성할 수 있습니다.
+- **네트워크**: 도커 컴포즈는 서비스 간 통신을 위한 네트워크를 자동으로 설정해줍니다. 이를 통해 컨테이너들이 서로 통신할 수 있습니다.
+- **볼륨**: 데이터를 영구적으로 저장하거나 공유하기 위해 사용되는 저장소입니다.
+
+### 도커 컴포즈와 도커의 차이점
+
+도커는 개별 컨테이너를 실행하고 관리하는 도구이고, 도커 컴포즈는 여러 개의 컨테이너를 하나의 애플리케이션으로 관리할 수 있는 도구입니다. 이를 통해 복잡한 멀티컨테이너 애플리케이션을 쉽게 관리할 수 있습니다.
+
+## 3. 쉘스크립트 배포 프로세스 개요
+
+### 기존 쉘스크립트 배포 흐름
+
+기존에는 다음과 같은 쉘 스크립트를 사용하여 서버에 애플리케이션을 배포했습니다.
 
 ```shell
 # 자바 설치
-wget -O- https://apt.corretto.aws/corretto.key | sudo apt-key add - 
+wget -O- https://apt.corretto.aws/corretto.key | sudo apt-key add -
 sudo add-apt-repository 'deb https://apt.corretto.aws stable main'
 sudo apt-get update; sudo apt-get install -y java-17-amazon-corretto-jdk
 
@@ -41,125 +53,39 @@ java -jar spring-roomescape-payment-0.0.1-SNAPSHOT.jar
 nohup java -jar spring-roomescape-payment-0.0.1-SNAPSHOT.jar &
 ```
 
-10줄 남짓의 코드로 배포할 수 있기 때문에, 이것도 그렇게 나쁜 방법으로 보이지는 않습니다. 
+### 일반적인 쉘스크립트 배포의 장단점
 
-그러나 이 스크립트에는 아쉬운 점이 있습니다. 하나씩 짚어보겠습니다. 
+장점은 간단한 배포 자동화를 할 수 있다는 점입니다. 하지만 운영체제마다 설치 방법이 다르고, 환경 설정이 복잡해지면 유지보수가 어려워진다는 단점이 있습니다.
 
-### 자바 설치 스크립트
+### 전환을 고려하게 된 이유
 
-```shell
-wget -O- https://apt.corretto.aws/corretto.key | sudo apt-key add - 
-sudo add-apt-repository 'deb https://apt.corretto.aws stable main'
-sudo apt-get update; sudo apt-get install -y java-17-amazon-corretto-jdk
-```
+여러 개의 서버에 동일한 설정을 적용하고, 환경 설정을 일관되게 유지하기 위해 도커 컴포즈로의 전환을 고려하게 되었습니다.
 
-먼저 자바 설치를 위한 스크립트는 운영체제마다 다릅니다. 우분투에서는 APT라는 패키지 관리자를 사용하지만, CentOS에서는 YUM을 사용합니다. 또 윈도우 사용자가 본인의 PC에서 비슷한 환경을 만들어 테스트 하고 싶다면 어떨까요? 
+## 4. 도커 컴포즈 배포 프로세스 전환 준비
 
-게다가, 이 스크립트는 매번 실행될 필요가 없습니다. 자바를 한 번만 설치하면 되니까요. 어떤 스크립트는 한 번만 실행하면 되고, 어떤 스크립트는 배포할 때마다 실행해야 된다는 것을 스크립트만 보고 알기는 어려울 것입니다.  
+### 기존 환경 분석 및 의존성 파악
 
-### 빌드 스크립트
+기존의 배포 스크립트를 분석하고, 각 서비스의 의존성을 파악해야 했습니다. 자바 설치, Nginx 설정 등 모든 요소를 도커 컴포즈로 전환할 수 있는지 확인했습니다.
 
-```shell
-git clone https://github.com/woowacourse/spring-roomescape-payment.git
-cd spring-roomescape-payment
-./gradlew bootJar
-```
+### 도커 컴포즈로 전환 시 필요한 요구 사항 및 준비물
 
-빌드 스크립트에서 깃 저장소를 clone 해서 빌드하고 있는데, CI 등으로 인해 빌드를 위한 서버를 별도로 관리하게 된다면 어떨까요? 해당 스크립트는 빌드된 파일을 다운로드만 하는 내용으로 바뀌어야 할 것입니다. 
+- **도커 설치**: 도커 컴포즈를 사용하려면 서버에 도커와 도커 컴포즈가 설치되어 있어야 합니다.
+- **이미지 준비**: 애플리케이션을 실행할 도커 이미지를 미리 빌드하거나, 도커 허브에서 필요한 이미지를 가져와야 합니다.
 
-실행하는 스크립트에도 아쉬운 점이 있습니다. 만약 `-Dspring.config.location` 옵션으로 설정 파일을 명시해준다면, 새로운 설정 파일이 추가될 때마다 스크립트도 변경해야 합니다. 또 새로 배포한 jar 파일을 실행할 때, 이전에 실행된 프로세스를 종료하고 새로 실행하고 싶으면 쉘 스크립트를 어떻게 변경해야 할까요? 무중단 배포를 하고 싶다면 어떻게 변경해야 할까요? 쉘스크립트를 모국어처럼 쓸 수 있다면 괜찮을지도 모릅니다. 
+### 프로젝트 구조 및 구성 파일 설정
 
-### 서버 실행 스크립트
-```shell
-cd build/libs
-java -jar spring-roomescape-payment-0.0.1-SNAPSHOT.jar
-nohup java -jar spring-roomescape-payment-0.0.1-SNAPSHOT.jar &
-```
+- **.env 파일**: 환경 변수를 저장해 구성 파일에서 재사용할 수 있습니다.
+- **docker-compose.yml 파일**: 각 서비스, 네트워크, 볼륨 등의 설정을 정의합니다.
 
-이렇게 요구사항이 바뀔 때마다 쉘 스크립트를 변경해 배포 프로세스를 재구성하는 일은 상당히 까다롭습니다. 설정 파일의 위치와 내용이 스크립트와 강하게 결합해서, 프로젝트가 발전할수록 관리 포인트가 무한히 늘어나기 때문입니다. 무엇보다 쉘스크립트는 스크립트 언어이기 때문에 스크립트를 작성하는 시점에 오류를 알 수 없습니다.
+## 5. 도커 컴포즈 파일 작성 및 설정하기
 
-심지어 우리는 배포 프로세스를 문서화해서 동료들에게 설명해야 하죠. 동료에게 쉘 스크립트로 돌아가는 배포 프로세스를 인수인계하는 일은 꽤나 고될 것 같습니다.  
+### `docker-compose.yml` 파일 작성 방법
 
-### 실제 배포에 사용된 스크립트
+`docker-compose.yml` 파일은 애플리케이션의 전체 구조를 정의하는 파일로, 각 서비스와 네트워크, 볼륨 등을 설정합니다.
 
-```shell
-#!/usr/bin/env bash
-
-source before-start.sh
-source after-start.sh
-
-function __nohup_run() {
-
-	output_log_path="$ARTIFACT_DIR/spring-log/output-$IDLE_PROFILE.log"
-	error_log_path="$ARTIFACT_DIR/spring-log/error-$IDLE_PROFILE.log"
-
-	local -r jar_name=$(ls -tr $ARTIFACT_DIR/*.jar | grep "$PROJECT.*\.jar" | tail -n 1)
-	local -r config_location="$ARTIFACT_DIR/application-$PROFILE_GROUP.yml,$ARTIFACT_DIR/application-db.yml,$ARTIFACT_DIR/application-swagger.yml"
-
-	echo "> start.sh: Current idle port=$IDLE_PORT"
-	echo "> start.sh: New jar name=$jar_name"
-	echo "> start.sh: New profile=$IDLE_PROFILE"
-
-	nohup java -jar \
-		-Dspring.config.location=$config_location \
-		-Dspring.profiles.active=$IDLE_PROFILE \
-		-Duser.timezone=Asia/Seoul \
-		$jar_name \
-		1> $output_log_path \
-		2> $error_log_path \
-		&
-}
-
-function __verify() {
-	for count in {1..5}
-	do
-		local pid=$(lsof -ti ":$IDLE_PORT")
-		if [ -n "$pid" ]; then
-			echo "> start.sh: New application $pid started."
-			echo "> start.sh: Check $output_log_path to check logs."
-			return 0
-		fi
-		sleep $count
-	done
-	echo "> start.sh: Verification failed."
-	echo "> start.sh: Check $ABS_DIR/nohup.out or $output_log_path to check logs."
-	exit 1
-}
-
-function main() {
-	__nohup_run
-	__verify
-}
-
-main
-```
-
-위의 스크립트는 실제 배포에 쓰였던 스크립트의 일부입니다. 첫 번째 함수는 배포된 jar 파일을 설정을 적용해 실행할 뿐인데, 17줄이나 됩니다. 두 번째 함수는 프로세스가 실행중인지 검증합니다. 
-
-위 3개 함수 말고도 13개의 다른 함수가 `before-start.sh`, `after-start.sh`에 import 되어 사용되었습니다. 물론 저보다 실력 좋은 분이 스크립트를 작성했다면 더 간결하고 효율적으로 스크립트를 사용할 수 있었을 것입니다. 다만 팀원 누구나 접근할 수 있어야 하는 스크립트에 그렇게까지 많은 지식이 요구되지 않는 편이 팀의 생산성에 더 도움이 될 것입니다.   
-
-## Nginx
-
-배포를 위해서 쉘스크립트만 필요한 건 아니었습니다. Nginx와 Certbot을 조합해 SSL 인증서를 설정하고 있었습니다. 이를 위해서는 EC2 인스턴스에서 APT를 사용해 Nginx를 직접 설치하고 설정했습니다.
-
-Nginx를 설치하면 설정 파일이 `/etc/nginx`에 위치합니다. 해당 경로는 `$HOME` 경로를 벗어나므로 매번 `sudo` 권한이 필요했습니다. 이것 또한 작업을 번거롭게 만드는 요인이었습니다.
-
-또 nginx를 재실행하거나 설정을 적용하기 위해 아래의 명령어들을 외우거나 매번 검색해서 찾아야 했습니다.
-
-```shell
-sudo nginx -t                   # 설정 파일의 문법 검사
-sudo nginx -s reload            # 설정 파일 로드
-sudo systemctl nginx restart    # 프로세스 재시작
-```
-
-
-## 도커 컴포즈
-
-도커 컴포즈를 사용하면 다음의 설정 파일이 서버 실행과 Nginx 설정 적용을 위한 스크립트를 대체합니다. 
+### 서비스 정의 및 네트워크 구성
 
 ```yml
-name: code-zap
-
 services:
   spring:
     image: amazoncorretto:17
@@ -170,156 +96,92 @@ services:
       TZ: Asia/Seoul
     volumes:
       - ./spring:/app
-    entrypoint: [
-      "java", "-jar",
-      "-Dspring.config.location=/app/application-prod.yml,/app/application-db/yml,/app/application-actuator.yml,/app/application-swagger.yml",
-      "-Dspring.profiles.active=prod,db,actuator,swagger",
-      "/app/zap.jar"
-    ]
-
-  nginx:
-    image: nginx:1.27.1
-    container_name: nginx
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      TZ: Asia/Seoul
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - /etc/letsencrypt:/etc/letsencrypt
-      - /var/log/nginx:/var/log/nginx
-  
+    entrypoint:
+      - "java"
+      - "-jar"
+      - "-Dspring.config.location=/app/application-prod.yml,/app/application-db.yml,/app/application-actuator.yml,/app/application-swagger.yml"
+      - "-Dspring.profiles.active=prod,db,actuator,swagger"
+      - "/app/zap.jar"
 ```
 
-얼핏 봐도 훨씬 간단합니다. 설정을 적용해 실행하고 싶다면 간단한 명령어만 입력하면 됩니다. 서비스명을 입력하지 않으면 모든 서비스가 실행됩니다. 
+### 볼륨 및 환경 변수 설정
 
-```shell
-docker compose up -d {서비스명}
-```
+`volumes`를 사용해 호스트와 컨테이너 간의 파일을 공유할 수 있습니다. 예를 들어, 로그 파일이나 설정 파일을 호스트에 저장할 수 있습니다.
 
-종료하고 싶을 때도 간단합니다. 서비스명을 입력하지 않으면 모든 컨테이너를 종료합니다. 
+### 도커 컴포즈에서 사용할 엔트리포인트 설정
 
-```shell
-docker compose down {서비스명}
-```
+`entrypoint`를 사용해 컨테이너가 시작될 때 실행할 명령어를 정의합니다. 이를 통해 애플리케이션을 자동으로 실행할 수 있습니다.
 
-재실행도 가능합니다. 
+## 6. 배포 스크립트 전환 과정
 
-```shell
-docker compose restart
-```
+### 기존 쉘스크립트 기능과 도커 컴포즈의 대응 관계
 
-특정 서비스만 실행하거나 재실행하는 것도 물론 가능합니다. 여러 개의 서비스를 실행하고 싶다면 띄어쓰기로 구분합니다. 
-```shell
-docker compose up -d {서비스명1} {서비스명2} ...
-docker compose restart {서비스명1} {서비스명2} ...
-```
+기존의 자바 설치, 빌드, 실행 과정을 도커 컴포즈의 이미지와 `docker-compose.yml` 설정으로 대체했습니다.
 
-하나씩 살펴 보겠습니다. 
+### 전환 과정에서 발생할 수 있는 이슈와 해결 방법
 
-### name & services
+- **네트워크 충돌**: 기존 포트를 다른 프로세스가 사용 중일 경우 충돌이 발생할 수 있습니다. 이를 해결하기 위해 포트를 변경하거나 기존 프로세스를 종료했습니다.
+- **의존성 문제**: 각 서비스 간 의존성을 설정해 도커 컴포즈가 올바른 순서로 서비스를 실행하도록 했습니다.
 
-```yml
-name: code-zap
+### 도커 컴포즈 명령어로 배포 자동화하기
 
-services:
-  spring:
-    ...
-  nginx:
-    ...
-```
+- 서비스 실행: `docker compose up -d`
+- 서비스 중지: `docker compose down`
+- 서비스 재시작: `docker compose restart`
 
-실행하려는 컴포즈의 이름은 `code-zap`이고, `spring`과 `nginx`라는 이름의 서비스를 실행한다는 설정입니다. 서비스 이름은 자유롭게 작성합니다. `spring`은 `server`로, `nginx`은 `proxy`라는 이름으로 바꿔도 아무런 문제가 없습니다. 
+## 7. 도커 컴포즈 배포 프로세스 테스트 및 검증
 
-### image
+### 단계별 테스트 절차
 
-```yml
-image: amazoncorretto:17
-```
+1. **로컬 테스트**: 로컬 환경에서 모든 서비스가 정상적으로 실행되는지 확인했습니다.
+2. **스테이징 환경 테스트**: 실제 운영 환경과 유사한 스테이징 환경에서 배포 및 기능 테스트를 수행했습니다.
 
-이 설정은 위에서 봤던 자바 설치 스크립트를 대체합니다. 
+### 오류 디버깅 및 문제 해결
 
-```yml
-wget -O- https://apt.corretto.aws/corretto.key | sudo apt-key add - 
-sudo add-apt-repository 'deb https://apt.corretto.aws stable main'
-sudo apt-get update; sudo apt-get install -y java-17-amazon-corretto-jdk
-```
+도커 로그(`docker logs {컨테이너명}`)를 사용해 오류 메시지를 확인하고 문제를 해결했습니다.
 
-3줄에서 1줄로 줄었고, 의미를 파악하기도 쉬워졌습니다. 도커만 설치되어있다면 현재 패키지 관리자가 무엇이든 상관 없게 되었습니다. 이미 이미지를 pull 했다면 저장된 이미지를 사용합니다. 도커 허브에 저장된 이미지를 사용합니다. 
+### 실제 운영 환경에서의 검증 포인트
 
-### container_name
-```yml
-container_name: spring
-```
+- 각 서비스가 정상적으로 통신하는지
+- SSL 인증서가 올바르게 적용되었는지
 
-컨테이너의 이름을 명시합니다. 선택 옵션이므로, 설정하지 않으면 서비스명과 같게 자동으로 설정됩니다. 
+## 8. 도커 컴포즈의 확장 기능 살펴보기
 
-### expose
-```yml
-expose:
-  - 8080
-```
+### 멀티컨테이너 오케스트레이션
 
-🚨 `ports` 설정과 혼동하지 않게 주의합니다. `expose`는 같은 네트워크에 속한 다른 컨테이너가 해당 옵션이 설정된 컨테이너의 포트로 접근할 수 있게 허용하는 옵션입니다. `ports`는 호스트에서 컨테이너의 포트로 접근할 수 있게 허용하는 설정입니다. 
+도커 컴포즈는 여러 개의 컨테이너를 함께 오케스트레이션하여 복잡한 애플리케이션을 쉽게 관리할 수 있습니다.
 
-이것이 가능한 이유는, 컨테이너에 따로 네트워크 설정을 하지 않은 경우 같은 컴포즈에 속한 컨테이너들은 하나의 네트워크에 소속된 것과 같기 때문입니다. 
+### 스케일링과 서비스 업데이트
 
-심지어 컴포즈는 컨테이너명을 호스트명으로 사용해 서로 통신할 수 있도록 자동으로 DNS를 설정합니다. 쉽게 말해, `nginx` 컨테이너에서 `http://spring:8080`으로 접속할 수 있게 됩니다.
+`docker compose up --scale` 명령어를 사용해 특정 서비스를 스케일링할 수 있습니다. 이를 통해 트래픽 증가에 대응할 수 있습니다.
 
-### environment
+### 로깅 및 모니터링 활용 방안
 
-```yml
-environment:
-  TZ: Asia/Seoul
-```
+도커의 로깅 드라이버를 사용해 각 서비스의 로그를 중앙화하거나, Prometheus와 Grafana 같은 모니터링 도구와 연계해 시스템 상태를 모니터링할 수 있습니다.
 
-해당 컨테이너에 환경변수를 설정합니다. 컨테이너 안에서 `export TZ="Asia/Seoul"`를 설정한 것과 같습니다.
-`env_file` 옵션과 `.env` 파일을 함께 사용하는 방식으로 대체할 수 있습니다.  
+## 9. 도커 컴포즈 전환의 이점과 도전 과제
 
-### volumes
+### 전환 후 장점: 효율성, 유지보수성, 확장성
 
-```yml
-volumes:
-  - ./spring:/app
-```
+- **효율성**: 설정 파일 하나로 여러 개의 컨테이너를 관리할 수 있어 효율적입니다.
+- **유지보수성**: 설정이 코드로 관리되므로 변경 이력을 추적하기 쉽습니다.
+- **확장성**: 스케일링이 용이하고, 여러 환경에서 일관된 배포가 가능합니다.
 
-볼륨 설정이 되지 않은 컨테이너는 종료했을 때 모든 데이터를 잃습니다. 이는 유연함과 효율을 제공하기도 하지만, 어떤 데이터는 영속될 필요가 있습니다. `volumes`는 그런 상황을 위해 필요한 옵션입니다. 
+### 남은 과제와 향후 개선 방향
 
-저는 호스트의 `{compose.yml 경로}/spring` 디렉토리에 스프링 서버 실행을 위한 jar 파일과 yml 설정 파일을 위치시켰습니다. 이 파일들은 도커 컨테이너에서 스프링 서버를 실행하기 위해 필요합니다. 그래서 컨테이너 내부의 `/app` 경로와 볼륨 설정을 해주었습니다. 이렇게 하면 컨테이너가 몇 번이고 꺼졌다 켜져도 서버 실행을 위해 필요한 파일들은 그대로 남아있게 됩니다. 
+- **모니터링 강화**: 현재는 기본적인 모니터링만 가능하며, 더 세부적인 모니터링 체계를 도입할 필요가 있습니다.
+- **보안 강화**: 환경 변수와 비밀 정보를 안전하게 관리하기 위한 추가적인 보안 조치가 필요합니다.
 
-### entrypoint
+### 도커 컴포즈의 한계와 보완책
 
-```yml
-    entrypoint: [
-      "java", "-jar",
-      "-Dspring.config.location=/app/application-prod.yml,/app/application-db/yml,/app/application-actuator.yml,/app/application-swagger.yml",
-      "-Dspring.profiles.active=prod,db,actuator,swagger",
-      "/app/zap.jar"
-    ]
-```
+도커 컴포즈는 단일 호스트에서의 오케스트레이션에는 유용하지만, 여러 호스트에 걸친 분산 오케스트레이션에는 한계가 있습니다. 이를 보완하기 위해 Kubernetes와 같은 도구를 도입할 수 있습니다.
 
-`entrypoint` 설정은 컨테이너가 실행되자마자 실행할 명령어를 명시합니다. 위의 설정은 컨테이너 내의 `/app` 디렉토리에 위치한 yml 설정 파일과 함께 jar 파일을 실행합니다. 쉘스크립트보다 가독성이 좋다는 것을 한 눈에 알 수 있습니다. 
+## 10. 결론
 
-```yml
-entrypoint: /app/entrypoint.sh
-```
+### 쉘스크립트에서 도커 컴포즈로 전환한 배포 프로세스 요약
 
-이렇게 파일로 분리해서 실행할 수도 있습니다. 
+기존의 쉘스크립트 기반 배포의 복잡성과 한계를 극복하기 위해 도커 컴포즈를 도입했습니다. 이를 통해 환경 설정의 일관성을 유지하고, 배포의 효율성과 안정성을 높일 수 있었습니다.
 
-## 결론
+### 성공적인 전환을 위한 조언 및 팁
 
-쉘 스크립트만을 사용해 배포할 때는 서버를 운영하는 데 필요한 응용프로그램들의 설치 방법이 OS마다 다르고, 변경에 필요한 리소스가 크다는 문제가 있었습니다. 
-
-도커 컴포즈를 사용하면 요구사항이 변경되더라도 OS에 구애받지 않고 유연하게 대처할 수 있었고, 팀원들과 소통하기 위한 비용도 줄어들었습니다. 
-
-이 글을 통해 도커 컴포즈를 왜 사용해야 할지, 어떻게 사용해야 할지 의문을 갖고 있던 분들에게 도움이 되었길 바랍니다. 
-
-## 참고 자료
-
-https://nginx.org/en/docs/
-
-https://docs.docker.com/reference/compose-file/
-
-https://hub.docker.com/
+- **작게 시작하기**: 초기에는 소규모 프로젝트에 도커 컴포즈를 적용해 보는 것이 좋습니다.
