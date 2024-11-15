@@ -1,4 +1,4 @@
-# 도커 컴포즈 살펴보기 - 쉘스크립트에서 도커 컴포즈로 배포 프로세스를 전환하며
+# 배포를 위한 도커 컴포즈 살펴보기
 
 ---
 
@@ -55,7 +55,7 @@ java -jar spring-roomescape-payment-0.0.1-SNAPSHOT.jar
 nohup java -jar spring-roomescape-payment-0.0.1-SNAPSHOT.jar &
 ```
 
- 운영체제마다 설치 방법이 다르고, 환경 설정이 복잡해지면 유지보수가 어려워진다는 단점이 있습니다. 또한, 다음과 같은 문제들이 있습니다:
+운영체제마다 설치 방법이 다르고, 환경 설정이 복잡해지면 유지보수가 어려워진다는 단점이 있습니다. 또한, 다음과 같은 문제들이 있습니다:
 
 - **운영체제 종속성**: 스크립트가 특정 운영체제에 맞춰 작성되므로, 다른 운영체제에서 실행할 때는 호환성 문제가 발생할 수 있습니다. 예를 들어, 우분투에서는 APT를 사용하지만 CentOS에서는 YUM을 사용해야 합니다.
 - **오류 처리의 어려움**: 쉘스크립트는 오류가 발생했을 때 이를 포괄적으로 처리하기 어렵습니다. 각 명령어의 성공 여부를 일일이 확인하고 처리해야 하기 때문에, 복잡한 스크립트에서는 오류가 발생해도 원인을 파악하기 어려운 경우가 많습니다.
@@ -68,7 +68,7 @@ nohup java -jar spring-roomescape-payment-0.0.1-SNAPSHOT.jar &
 
 ## 4. 도커 컴포즈 배포 프로세스 전환 준비
 
- 의존성을 확인한 결과, 다음과 같은 요소들이 도커 컴포즈 전환에 중요한 영향을 미쳤습니다:
+의존성을 확인한 결과, 다음과 같은 요소들이 도커 컴포즈 전환에 중요한 영향을 미쳤습니다:
 
 - **자바 설치 의존성**: 기존에 사용되었던 Amazon Corretto 자바 17을 도커 이미지로 대체해야 했습니다. 이를 위해 Amazon Corretto의 공식 이미지를 도커 컴포즈 설정에서 사용하도록 변경했습니다.
 - **Nginx 설정**: Nginx는 기존에 수동으로 설치 및 설정하였으나, 도커 컴포즈를 통해 이미지로 전환하여 설정 파일을 도커 볼륨으로 연결해 관리할 수 있도록 변경했습니다.
@@ -121,35 +121,13 @@ services:
       - 8080
     environment:
       TZ: Asia/Seoul
-    volumes:
+    volumes:  # volumes를 사용해 호스트와 컨테이너 간의 파일을 공유할 수 있습니다. 예를 들어, 로그 파일이나 설정 파일을 호스트에 저장할 수 있습니다.
       - ./spring:/app
-    entrypoint:
+    entrypoint: # entrypoint를 사용해 컨테이너가 시작될 때 실행할 명령어를 정의합니다.
       - "java"
       - "-jar"
       - "-Dspring.config.location=/app/application-prod.yml,/app/application-db.yml,/app/application-actuator.yml,/app/application-swagger.yml"
       - "-Dspring.profiles.active=prod,db,actuator,swagger"
-      - "/app/zap.jar"
-```
-
-`volumes`를 사용해 호스트와 컨테이너 간의 파일을 공유할 수 있습니다. 예를 들어, 로그 파일이나 설정 파일을 호스트에 저장할 수 있습니다. 다음은 볼륨 설정의 예시입니다:
-
-```yml
-volumes:
-  - ./spring/logs:/app/logs # 호스트의 `spring/logs` 디렉토리를 컨테이너 내의 `/app/logs` 디렉토리와 연결
-  - ./spring/config:/app/config # `spring/config` 디렉토리를 `/app/config` 디렉토리와 연결
-
-`entrypoint`를 사용해 컨테이너가 시작될 때 실행할 명령어를 정의합니다. 이를 통해 애플리케이션을 자동으로 실행할 수 있습니다. 다음은 `entrypoint` 설정의 예시입니다:
-
-```yml
-services:
-  spring:
-    image: amazoncorretto:17
-    container_name: spring
-    entrypoint:
-      - "java"
-      - "-jar"
-      - "-Dspring.config.location=/app/application-prod.yml,/app/application-db.yml"
-      - "-Dspring.profiles.active=prod,db"
       - "/app/zap.jar"
 ```
 
